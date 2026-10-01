@@ -180,7 +180,7 @@
       color: #64748b;
     }
 
-    /* 1:1 紧凑画板容器 (大幅缩小纵向占比，允许手指滑动画板区域) */
+    /* 1:1 紧凑画板容器 (锁定 touch-action 为 none，彻底杜绝 S Pen 书写时页面上下滑动) */
     .canvas-box {
       position: relative;
       width: 175px;
@@ -190,9 +190,9 @@
       border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       overflow: hidden;
-      touch-action: pan-y;
+      touch-action: none;
     }
-    /* 笔迹层 (允许手指滚动穿透，只捕获 S Pen) */
+    /* 笔迹层 (严禁原生手势劫持，保障 S Pen 纯粹绘制与零滑动) */
     #drawCanvas {
       position: absolute;
       top: 0;
@@ -202,7 +202,7 @@
       display: block;
       cursor: crosshair;
       z-index: 1;
-      touch-action: pan-y;
+      touch-action: none;
     }
     /* 纯 UI 辅助指引层（不参与 WebGL 渲染，绝不进镜子） */
     #guideCanvas {
@@ -350,6 +350,8 @@
 
     <div class="tool-group">
       <button class="btn" id="eraserBtn">橡皮</button>
+      <button class="btn" id="uploadImgBtn">导入抠图</button>
+      <input type="file" id="imgUploadInput" accept="image/*" style="display:none;">
       <button class="btn" id="clearBtn" style="margin-left:auto;">清空画板</button>
     </div>
 
@@ -360,6 +362,15 @@
         <span class="val" id="sizeValText">5 px</span>
       </div>
       <input type="range" id="brushSize" min="2" max="24" step="1" value="5">
+    </div>
+
+    <!-- 画笔不透明度调节 (解决正视重叠过曝刺眼) -->
+    <div class="slider-row">
+      <div class="section-title">
+        <span>画笔不透明度</span>
+        <span class="val" id="opacityValText">70%</span>
+      </div>
+      <input type="range" id="brushOpacitySlider" min="0.1" max="1.0" step="0.05" value="0.7">
     </div>
 
     <div class="slider-row">
@@ -400,9 +411,12 @@
     const pressureText = document.getElementById('pressureText');
     const brushSizeSlider = document.getElementById('brushSize');
     const sizeValText = document.getElementById('sizeValText');
+    const brushOpacitySlider = document.getElementById('brushOpacitySlider');
+    const opacityValText = document.getElementById('opacityValText');
 
     let currentShape = 'triangle';
     let currentColor = '#00f0ff';
+    let brushOpacity = 0.7;
     let isEraser = false;
     let isDrawing = false;
     let lastX = 0, lastY = 0;
@@ -450,7 +464,7 @@
     }
     drawUIGuide(currentShape);
 
-    // 压感笔触输入处理 (翻倍像素密度，笔迹细腻顺滑)
+    // 压感笔触输入处理 (应用不透明度，消除重叠过亮)
     function drawStroke(x, y, pressure) {
       drawCtx.save();
       drawCtx.lineCap = 'round';
@@ -468,6 +482,7 @@
         drawCtx.strokeStyle = 'rgba(0,0,0,1)';
       } else {
         drawCtx.globalCompositeOperation = 'source-over';
+        drawCtx.globalAlpha = brushOpacity;
         drawCtx.strokeStyle = currentColor;
       }
 
@@ -491,8 +506,18 @@
       };
     }
 
-    // 严格限制仅响应 S Pen 压感笔输入 (桌面调试允许鼠标)，彻底屏蔽手指触摸误画，手指可顺滑滚动画板与菜单
+    // 严格区分 S Pen 与手指交互：S Pen 专享零滑动纯净绘制，手指触碰画板时平滑代为滚动菜单
+    let isFingerScrolling = false;
+    let fingerStartY = 0;
+    let drawerScrollStart = 0;
+
     drawCanvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') {
+        isFingerScrolling = true;
+        fingerStartY = e.clientY;
+        drawerScrollStart = controlDrawer.scrollTop;
+        return;
+      }
       if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
       e.preventDefault();
       isDrawing = true;
@@ -503,6 +528,11 @@
     });
 
     window.addEventListener('pointermove', (e) => {
+      if (isFingerScrolling && e.pointerType === 'touch') {
+        const deltaY = e.clientY - fingerStartY;
+        controlDrawer.scrollTop = drawerScrollStart - deltaY;
+        return;
+      }
       if (!isDrawing) return;
       if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
       e.preventDefault();
@@ -511,6 +541,9 @@
     });
 
     const stopDrawing = () => {
+      if (isFingerScrolling) {
+        isFingerScrolling = false;
+      }
       if (isDrawing) {
         isDrawing = false;
         pressureText.textContent = '压感: 0.00';
@@ -613,6 +646,54 @@
     document.getElementById('clearBtn').addEventListener('click', clearDrawCanvas);
     brushSizeSlider.addEventListener('input', (e) => {
       sizeValText.textContent = `${e.target.value} px`;
+    });
+
+    // 不透明度滑块监听
+    if (brushOpacitySlider) {
+      brushOpacitySlider.addEventListener('input', (e) => {
+        brushOpacity = parseFloat(e.target.value);
+        opacityValText.textContent = `${Math.round(brushOpacity * 100)}%`;
+      });
+    }
+
+    // 导入抠图 (支持 iPhone/三星长按抠图及透明 PNG/WebP)
+    const uploadImgBtn = document.getElementById('uploadImgBtn');
+    const imgUploadInput = document.getElementById('imgUploadInput');
+
+    uploadImgBtn.addEventListener('click', () => {
+      imgUploadInput.click();
+    });
+
+    imgUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // 保持原始长宽比，等比缩放并居中贴入 1024x1024 画布
+          const maxDim = 680;
+          let w = img.width;
+          let h = img.height;
+          const ratio = Math.min(maxDim / w, maxDim / h, 1.0);
+          w *= ratio;
+          h *= ratio;
+          const x = (1024 - w) / 2;
+          const y = (1024 - h) / 2;
+
+          drawCtx.save();
+          drawCtx.globalCompositeOperation = 'source-over';
+          drawCtx.globalAlpha = brushOpacity;
+          drawCtx.drawImage(img, x, y, w, h);
+          drawCtx.restore();
+
+          if (window.canvasTexture) window.canvasTexture.needsUpdate = true;
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+      imgUploadInput.value = '';
     });
 
     // ==========================================
@@ -792,7 +873,8 @@
               if (drawUV.x >= 0.0 && drawUV.x <= 1.0 && drawUV.y >= 0.0 && drawUV.y <= 1.0) {
                 vec4 stroke = texture2D(uDrawTexture, drawUV);
                 if (stroke.a > 0.01) {
-                  accumulatedLight += stroke.rgb * bounceFactor;
+                  // 严格结合 Alpha 通道计算光通量，消除多层正视堆叠造成的死白刺眼
+                  accumulatedLight += stroke.rgb * stroke.a * bounceFactor;
                 }
               }
 
