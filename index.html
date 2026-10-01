@@ -51,19 +51,19 @@
       color: #8c9ba8;
     }
 
-    /* 右侧悬浮收起/展开按钮 */
+    /* 右侧悬浮收起/展开按钮 (紧凑贴角) */
     .drawer-toggle-btn {
       position: absolute;
-      top: 18px;
-      right: 20px;
+      top: 10px;
+      right: 12px;
       z-index: 25;
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
       background: rgba(18, 22, 30, 0.92);
       border: 1px solid rgba(0, 240, 255, 0.4);
       color: #00f0ff;
-      font-size: 16px;
+      font-size: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -78,26 +78,30 @@
       color: #94a3b8;
     }
 
-    /* 右侧控制面板 (支持平滑折叠抽屉) */
+    /* 右侧控制面板 (精简紧凑 + 留足底部安全区不遮挡 + 原生流畅顺滑滚动) */
     .control-drawer {
       position: absolute;
-      top: 18px;
-      right: 20px;
-      width: 310px;
-      max-height: calc(100vh - 36px);
+      top: 10px;
+      right: 10px;
+      width: clamp(245px, 76vw, 275px);
+      max-height: calc(100dvh - 20px);
+      max-height: calc(100vh - 20px);
       overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
       z-index: 20;
-      background: rgba(14, 16, 22, 0.94);
+      background: rgba(14, 16, 22, 0.95);
       backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 12px;
-      padding: 16px;
-      padding-top: 50px;
+      border-radius: 10px;
+      padding: 10px 10px 85px 10px;
+      padding-top: 36px;
       color: #cfd6e0;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 7px;
       transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.25s;
     }
     .control-drawer.collapsed {
@@ -111,9 +115,9 @@
       color: #00f0ff !important;
     }
     .section-title {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.6px;
+      letter-spacing: 0.4px;
       color: #94a3b8;
       display: flex;
       justify-content: space-between;
@@ -122,7 +126,7 @@
     .section-title span.val {
       color: #00f0ff;
       font-family: monospace;
-      font-size: 12px;
+      font-size: 11px;
     }
 
     /* 形状选择栏（三角、正方、圆形、16:9长方形） */
@@ -176,19 +180,19 @@
       color: #64748b;
     }
 
-    /* 1:1 绝对正方形画板容器 */
+    /* 1:1 紧凑画板容器 (大幅缩小纵向占比，允许手指滑动画板区域) */
     .canvas-box {
       position: relative;
-      width: 260px;
-      height: 260px;
+      width: 175px;
+      height: 175px;
       margin: 0 auto;
       background: #050608;
       border-radius: 8px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       overflow: hidden;
-      touch-action: none;
+      touch-action: pan-y;
     }
-    /* 笔迹层（纹理源） */
+    /* 笔迹层 (允许手指滚动穿透，只捕获 S Pen) */
     #drawCanvas {
       position: absolute;
       top: 0;
@@ -198,6 +202,7 @@
       display: block;
       cursor: crosshair;
       z-index: 1;
+      touch-action: pan-y;
     }
     /* 纯 UI 辅助指引层（不参与 WebGL 渲染，绝不进镜子） */
     #guideCanvas {
@@ -301,11 +306,14 @@
       </div>
     </div>
 
-    <!-- 陀螺仪体感模式按钮 -->
-    <button class="toggle-led-btn off" id="gyroToggleBtn" style="border-color: rgba(255, 170, 0, 0.4); color: #ffaa00;">
-      <span id="gyroStatusDot">○</span>
-      <span id="gyroStatusText">陀螺仪体感：开启</span>
-    </button>
+    <!-- 陀螺仪与正面满屏居中按钮组合 -->
+    <div style="display:flex; gap:6px;">
+      <button class="toggle-led-btn off" id="gyroToggleBtn" style="flex:1; border-color: rgba(255, 170, 0, 0.4); color: #ffaa00;">
+        <span id="gyroStatusDot">○</span>
+        <span id="gyroStatusText">陀螺仪体感</span>
+      </button>
+      <button class="btn" id="resetViewBtn" style="padding:0 12px; font-size:11px; white-space:nowrap; border-color:rgba(0,240,255,0.3); color:#00f0ff;" title="重置回正面满屏居中视角">正面居中</button>
+    </div>
 
     <!-- 显眼外框灯带启闭与专属改色按钮 -->
     <div style="display:flex; gap:8px; align-items:center;">
@@ -483,7 +491,9 @@
       };
     }
 
+    // 严格限制仅响应 S Pen 压感笔输入 (桌面调试允许鼠标)，彻底屏蔽手指触摸误画，手指可顺滑滚动画板与菜单
     drawCanvas.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
       e.preventDefault();
       isDrawing = true;
       const pos = getCoords(e);
@@ -494,16 +504,20 @@
 
     window.addEventListener('pointermove', (e) => {
       if (!isDrawing) return;
+      if (e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+      e.preventDefault();
       const pos = getCoords(e);
       drawStroke(pos.x, pos.y, e.pressure);
     });
 
-    window.addEventListener('pointerup', () => {
+    const stopDrawing = () => {
       if (isDrawing) {
         isDrawing = false;
         pressureText.textContent = '压感: 0.00';
       }
-    });
+    };
+    window.addEventListener('pointerup', stopDrawing);
+    window.addEventListener('pointercancel', stopDrawing);
 
     // 外框灯带独立选色逻辑
     let isPickingLedColor = false;
@@ -950,6 +964,7 @@
     let gyroCalibrated = false;
     let baseBeta = 0, baseGamma = 0;
     let curBeta = 0, curGamma = 0;
+    let activeRadius = 6.2;
     const savedCamPos = new THREE.Vector3(0, 0, 6.2);
 
     function onDeviceOrientation(e) {
@@ -968,6 +983,25 @@
     const gyroToggleBtn = document.getElementById('gyroToggleBtn');
     const gyroStatusDot = document.getElementById('gyroStatusDot');
     const gyroStatusText = document.getElementById('gyroStatusText');
+    const resetViewBtn = document.getElementById('resetViewBtn');
+
+    // 智能正面满屏居中：依据实际画板与屏幕尺寸精准对齐，消除保守黑边
+    function resetToFrontView() {
+      const isPortrait = window.innerHeight > window.innerWidth;
+      const fitDist = isPortrait
+        ? (1.45 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / camera.aspect) * 0.70
+        : 4.6;
+      activeRadius = THREE.MathUtils.clamp(fitDist, 2.2, 7.5);
+      camera.position.set(0, 0, activeRadius);
+      camera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
+      controls.update();
+      savedCamPos.copy(camera.position);
+      if (isGyroActive) {
+        gyroCalibrated = false;
+      }
+    }
+    if (resetViewBtn) resetViewBtn.addEventListener('click', resetToFrontView);
 
     function toggleGyro() {
       if (!isGyroActive) {
@@ -989,26 +1023,29 @@
     function activateGyro() {
       isGyroActive = true;
       gyroCalibrated = false;
+      // 继承并锁定当前实际缩放距离（放多大就多大，绝不强制缩放回退）
+      activeRadius = Math.max(1.8, camera.position.distanceTo(controls.target));
       savedCamPos.copy(camera.position);
       controls.enabled = false;
       window.addEventListener('deviceorientation', onDeviceOrientation, true);
       gyroToggleBtn.classList.remove('off');
       gyroToggleBtn.style.background = 'rgba(255, 170, 0, 0.25)';
       gyroStatusDot.textContent = '●';
-      gyroStatusText.textContent = '陀螺仪体感：开启';
+      gyroStatusText.textContent = '陀螺仪：开启';
     }
 
     function deactivateGyro() {
       isGyroActive = false;
       window.removeEventListener('deviceorientation', onDeviceOrientation, true);
       controls.enabled = true;
-      camera.position.copy(savedCamPos);
+      camera.position.set(0, 0, activeRadius);
       camera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
       controls.update();
       gyroToggleBtn.classList.add('off');
       gyroToggleBtn.style.background = 'transparent';
       gyroStatusDot.textContent = '○';
-      gyroStatusText.textContent = '陀螺仪体感：关闭';
+      gyroStatusText.textContent = '陀螺仪：关闭';
     }
 
     gyroToggleBtn.addEventListener('click', toggleGyro);
@@ -1020,10 +1057,12 @@
         const dBeta = THREE.MathUtils.clamp(curBeta - baseBeta, -45, 45);
         const dGamma = THREE.MathUtils.clamp(curGamma - baseGamma, -45, 45);
 
-        // 手机左右/上下倾斜直接驱动视线相对镜面的入射角偏移 (沉浸模拟手持实体镜视差)
-        const targetX = (dGamma / 45.0) * 3.8;
-        const targetY = -(dBeta / 45.0) * 3.8;
-        const targetZ = Math.sqrt(Math.max(2.0, 38.44 - targetX * targetX - targetY * targetY));
+        // 动态基于用户当前的缩放距离 activeRadius 计算视差，放大到全屏时依然保持贴脸沉浸倾斜
+        const tiltAmp = Math.min(activeRadius * 0.52, 3.8);
+        const targetX = (dGamma / 45.0) * tiltAmp;
+        const targetY = -(dBeta / 45.0) * tiltAmp;
+        const radSq = activeRadius * activeRadius;
+        const targetZ = Math.sqrt(Math.max(0.1, radSq - targetX * targetX - targetY * targetY));
 
         camera.position.x += (targetX - camera.position.x) * 0.12;
         camera.position.y += (targetY - camera.position.y) * 0.12;
