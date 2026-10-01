@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>物理级三角无限深渊镜 - S Pen 压感画板版</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      overflow: hidden;
+      background-color: #07080a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      touch-action: none;
+    }
+    #stage {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    /* 顶部提示 */
+    .hud-title {
+      position: absolute;
+      top: 18px;
+      left: 20px;
+      z-index: 10;
+      color: #cfd6e0;
+      background: rgba(15, 18, 24, 0.8);
+      backdrop-filter: blur(12px);
+      padding: 12px 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      pointer-events: none;
+    }
+    .hud-title h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #00f0ff;
+      margin-bottom: 2px;
+    }
+    .hud-title p {
+      font-size: 11px;
+      color: #8c9ba8;
+    }
+
+    /* 右侧控制与绘图面板 */
+    .control-drawer {
+      position: absolute;
+      top: 18px;
+      right: 20px;
+      width: 320px;
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+      z-index: 10;
+      background: rgba(14, 16, 22, 0.88);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 16px;
+      color: #cfd6e0;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .section-title span.val {
+      color: #00f0ff;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 5px;
+      background: #232733;
+      border-radius: 3px;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #00f0ff;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+    }
+
+    /* 三角画板容器 */
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 250px;
+      background: #0a0b10;
+      border-radius: 8px;
+      border: 1px dashed rgba(255, 255, 255, 0.18);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #drawCanvas {
+      width: 280px;
+      height: 242px;
+      display: block;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .canvas-mask-hint {
+      position: absolute;
+      top: 6px;
+      left: 8px;
+      font-size: 10px;
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    /* 笔刷与颜色工具条 */
+    .tool-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .color-swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .color-swatch.active {
+      border-color: #ffffff;
+      transform: scale(1.15);
+      box-shadow: 0 0 10px currentColor;
+    }
+    .btn {
+      padding: 6px 12px;
+      font-size: 11px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: #1a1e28;
+      color: #e0e6ed;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:active {
+      background: #2c3344;
+    }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #b0bac9;
+    }
+    .switch-row input[type=checkbox] {
+      accent-color: #00f0ff;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <div id="stage"></div>
+
+  <div class="hud-title">
+    <h1>物理级深渊镜 - S Pen 压感创作</h1>
+    <p>3D 视角：拖拽旋转 / 双指缩放 / 右键平移</p>
+  </div>
+
+  <!-- 右侧设置与创作面板 -->
+  <div class="control-drawer">
+    <!-- 间距 / 框架厚度调节 -->
+    <div class="slider-row">
+      <div class="section-title">
+        <span>反射间距 (框架厚度)</span>
+        <span class="val" id="depthValText">0.18 m</span>
+      </div>
+      <input type="range" id="depthSlider" min="0.04" max="0.45" step="0.01" value="0.18">
+      <p style="font-size:10px; color:#607080;">拉大间距可消除过密重叠，并自适应加厚外壳</p>
+    </div>
+
+    <!-- 边框原生灯带开关 -->
+    <div class="switch-row">
+      <span>开启外框单圈灯带</span>
+      <input type="checkbox" id="edgeLedSwitch" checked>
+    </div>
+
+    <!-- 灯光亮度调节 -->
+    <div class="slider-row">
+      <div class="section-title">
+        <span>灯光亮度调节</span>
+        <span class="val" id="brightValText">1.8x</span>
+      </div>
+      <input type="range" id="brightSlider" min="0.4" max="4.0" step="0.1" value="1.8">
+    </div>
+
+    <!-- S Pen 压感绘图画板 -->
+    <div class="slider-row">
+      <div class="section-title">
+        <span>S Pen 三角压感面板</span>
+        <span class="val" id="pressureText">压感: 0.00</span>
+      </div>
+      <div class="canvas-container">
+        <canvas id="drawCanvas" width="560" height="485"></canvas>
+        <div class="canvas-mask-hint">在三角区域内挥笔 (支持 S Pen 压感)</div>
+      </div>
+    </div>
+
+    <!-- 调色盘与画笔大小 -->
+    <div class="tool-group">
+      <div class="color-swatch active" style="background:#00f0ff; color:#00f0ff;" data-color="#00f0ff"></div>
+      <div class="color-swatch" style="background:#ff007f; color:#ff007f;" data-color="#ff007f"></div>
+      <div class="color-swatch" style="background:#ffaa00; color:#ffaa00;" data-color="#ffaa00"></div>
+      <div class="color-swatch" style="background:#00ff88; color:#00ff88;" data-color="#00ff88"></div>
+      <div class="color-swatch" style="background:#a033ff; color:#a033ff;" data-color="#a033ff"></div>
+      <div class="color-swatch" style="background:#ffffff; color:#ffffff;" data-color="#ffffff"></div>
+      <button class="btn" id="eraserBtn" style="margin-left:auto;">橡皮擦</button>
+      <button class="btn" id="clearBtn">清空</button>
+    </div>
+
+    <div class="slider-row">
+      <div class="section-title">
+        <span>画笔基础粗细</span>
+        <span class="val" id="sizeValText">6 px</span>
+      </div>
+      <input type="range" id="brushSize" min="2" max="32" step="1" value="6">
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 2D 压感画板与纹理映射系统 (优化 S Pen)
+    // ==========================================
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const pressureText = document.getElementById('pressureText');
+    const brushSizeSlider = document.getElementById('brushSize');
+    const sizeValText = document.getElementById('sizeValText');
+
+    // 画布像素分辨率：560 x 485 (对应长宽比 2.77128 : 2.4 的等边三角形边界)
+    const CW = canvas.width;
+    const CH = canvas.height;
+
+    // 三角形顶点在画布内的绝对坐标
+    const P0 = { x: CW * 0.5, y: 8 };
+    const P1 = { x: 8,        y: CH - 8 };
+    const P2 = { x: CW - 8,   y: CH - 8 };
+
+    let currentColor = '#00f0ff';
+    let isEraser = false;
+    let isDrawing = false;
+    let lastX = 0, lastY = 0;
+
+    // 绘制画板内部辅助三角线与吸光背景
+    function resetCanvas() {
+      ctx.clearRect(0, 0, CW, CH);
+      ctx.fillStyle = '#06070a';
+      ctx.fillRect(0, 0, CW, CH);
+
+      // 绘制淡灰色三角边界参考框
+      ctx.beginPath();
+      ctx.moveTo(P0.x, P0.y);
+      ctx.lineTo(P1.x, P1.y);
+      ctx.lineTo(P2.x, P2.y);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    resetCanvas();
+
+    // 预备 Three.js 动态画布纹理
+    const canvasTexture = new THREE.CanvasTexture(canvas);
+    canvasTexture.minFilter = THREE.LinearFilter;
+    canvasTexture.magFilter = THREE.LinearFilter;
+    canvasTexture.generateMipmaps = false;
+
+    // 压感笔触绘制函数
+    function drawStroke(x, y, pressure) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // 判定是否是手写笔输入并读取物理压感
+      let p = pressure;
+      if (p === undefined || p === 0) p = 0.5; // 无压感普通鼠标降级中等粗细
+      pressureText.textContent = `压感: ${p.toFixed(2)}`;
+
+      const baseSize = parseFloat(brushSizeSlider.value);
+      const strokeWidth = Math.max(1.5, baseSize * p * 2.2);
+
+      ctx.lineWidth = strokeWidth;
+
+      if (isEraser) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = currentColor;
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.restore();
+
+      lastX = x;
+      lastY = y;
+      canvasTexture.needsUpdate = true;
+    }
+
+    // 转换事件坐标到 Canvas 真实像素比
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = CW / rect.width;
+      const scaleY = CH / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    // 监听 Pointer 事件（完整支持 S Pen / 触控笔 / 手指）
+    canvas.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getCanvasCoords(e);
+      lastX = pos.x;
+      lastY = pos.y;
+      drawStroke(pos.x, pos.y, e.pressure);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      const pos = getCanvasCoords(e);
+      drawStroke(pos.x, pos.y, e.pressure);
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isDrawing) {
+        isDrawing = false;
+        pressureText.textContent = '压感: 0.00';
+      }
+    });
+
+    // 笔刷调色盘交互
+    document.querySelectorAll('.color-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        swatch.classList.add('active');
+        currentColor = swatch.getAttribute('data-color');
+        isEraser = false;
+        document.getElementById('eraserBtn').style.background = '#1a1e28';
+      });
+    });
+
+    document.getElementById('eraserBtn').addEventListener('click', () => {
+      isEraser = true;
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+      document.getElementById('eraserBtn').style.background = '#00f0ff22';
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      resetCanvas();
+      canvasTexture.needsUpdate = true;
+    });
+
+    brushSizeSlider.addEventListener('input', (e) => {
+      sizeValText.textContent = `${e.target.value} px`;
+    });
+
+    // ==========================================
+    // 2. 3D 渲染场景与等边几何严格对齐
+    // ==========================================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x07080a);
+
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 6.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.getElementById('stage').appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 2.0;
+    controls.maxDistance = 14;
+
+    // 严密的等边三角形几何常数（重心严格在 0,0，消除任何偏位空隙）
+    const R = 1.6;
+    const SQRT3_HALF = 0.8660254;
+    const V0 = new THREE.Vector2(0, R);
+    const V1 = new THREE.Vector2(-R * SQRT3_HALF, -0.5 * R);
+    const V2 = new THREE.Vector2( R * SQRT3_HALF, -0.5 * R);
+
+    function getTriangleShape(scale) {
+      const s = new THREE.Shape();
+      s.moveTo(V0.x * scale, V0.y * scale);
+      s.lineTo(V1.x * scale, V1.y * scale);
+      s.lineTo(V2.x * scale, V2.y * scale);
+      s.closePath();
+      return s;
+    }
+
+    const mirrorAssembly = new THREE.Group();
+
+    // 3. 实心金属外壳与自适应厚度结构
+    const frameOuterShape = getTriangleShape(1.22);
+    const frameInnerHole = getTriangleShape(1.0);
+    frameOuterShape.holes.push(frameInnerHole);
+
+    let defaultHousingDepth = 0.5;
+    const frameGeom = new THREE.ExtrudeGeometry(frameOuterShape, {
+      depth: 1.0, // 单位长度，通过 transform scale.z 实时驱动物理厚度
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.015,
+      bevelThickness: 0.015
+    });
+    frameGeom.translate(0, 0, -1.0); // 锚定前表面在 Z = 0
+
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x16181f,
+      metalness: 0.9,
+      roughness: 0.28
+    });
+    const frameMesh = new THREE.Mesh(frameGeom, frameMat);
+    mirrorAssembly.add(frameMesh);
+
+    // 封闭后壳面板
+    const backCoverGeom = new THREE.ShapeGeometry(getTriangleShape(1.22));
+    const backCoverMat = new THREE.MeshStandardMaterial({
+      color: 0x0d0e12,
+      metalness: 0.9,
+      roughness: 0.5
+    });
+    const backCover = new THREE.Mesh(backCoverGeom, backCoverMat);
+    mirrorAssembly.add(backCover);
+
+    // 4. 正面光学 Shader（计算自定义手绘图案在两镜间的无限折射衰减）
+    const mirrorGeom = new THREE.ShapeGeometry(getTriangleShape(1.0));
+
+    const mirrorShaderMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uCameraLocal: { value: new THREE.Vector3() },
+        uCavityDepth: { value: 0.18 }, // 可调节的反射间距
+        uEnableEdgeLed: { value: 1.0 },
+        uBrightness: { value: 1.8 },
+        uDrawTexture: { value: canvasTexture },
+        uLedColor: { value: new THREE.Vector3(0.0, 0.94, 1.0) }
+      },
+      vertexShader: `
+        varying vec3 vLocalPos;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+
+        void main() {
+          vLocalPos = position;
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uCameraLocal;
+        uniform float uCavityDepth;
+        uniform float uEnableEdgeLed;
+        uniform float uBrightness;
+        uniform sampler2D uDrawTexture;
+        uniform vec3 uLedColor;
+
+        varying vec3 vLocalPos;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+
+        const vec2 V0 = vec2(0.0, 1.6);
+        const vec2 V1 = vec2(-1.3856406, -0.8);
+        const vec2 V2 = vec2( 1.3856406, -0.8);
+
+        const int MAX_BOUNCES = 28;
+
+        float distToSegment(vec2 p, vec2 a, vec2 b) {
+          vec2 pa = p - a;
+          vec2 ba = b - a;
+          float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+          return length(pa - ba * h);
+        }
+
+        void main() {
+          vec3 rayDir = normalize(vLocalPos - uCameraLocal);
+          // 真实深渊镜幽暗吸光底色（深黑沉浸基调）
+          vec3 finalColor = vec3(0.001, 0.0015, 0.002);
+
+          if (rayDir.z < -0.001) {
+            vec3 accumulatedLight = vec3(0.0);
+
+            for (int k = 0; k < MAX_BOUNCES; k++) {
+              float virtualDepth = (float(k) + 0.5) * uCavityDepth;
+              float stepT = -virtualDepth / rayDir.z;
+              vec2 hitPos = vLocalPos.xy + rayDir.xy * stepT;
+
+              // 物理半透半反玻璃通量衰减模型 (首层约42%，随后按反射率几何级衰减，拒绝过曝刺眼)
+              float bounceFactor = 0.42 * pow(0.78, float(k));
+
+              // 1. 采样 S Pen 手绘图案 (细致清晰映射，杜绝漫反射模糊重叠)
+              vec2 drawUV = vec2(
+                (hitPos.x + 1.3856406) / 2.7712812,
+                (hitPos.y + 0.8) / 2.4
+              );
+
+              if (drawUV.x >= 0.0 && drawUV.x <= 1.0 && drawUV.y >= 0.0 && drawUV.y <= 1.0) {
+                vec4 stroke = texture2D(uDrawTexture, drawUV);
+                if (stroke.r > 0.05 || stroke.g > 0.05 || stroke.b > 0.05) {
+                  accumulatedLight += stroke.rgb * bounceFactor;
+                }
+              }
+
+              // 2. 边框单圈灯带 (收窄为极细精致的物理霓虹灯丝，层与层之间保留清晰的幽黑空隙)
+              if (uEnableEdgeLed > 0.5) {
+                float d0 = distToSegment(hitPos, V0, V1);
+                float d1 = distToSegment(hitPos, V1, V2);
+                float d2 = distToSegment(hitPos, V2, V0);
+                float edgeDist = min(d0, min(d1, d2));
+
+                // 极细灯线（宽度约 0.016），彻底消除大面积强光重叠泛白
+                if (edgeDist < 0.04) {
+                  float core = smoothstep(0.016, 0.002, edgeDist);
+                  float microGlow = exp(-edgeDist * 80.0) * 0.25;
+                  accumulatedLight += uLedColor * (core + microGlow) * bounceFactor;
+                }
+              }
+            }
+            // 墨黑熏黑玻璃微吸光并结合可调亮度系数
+            finalColor += accumulatedLight * vec3(0.9, 0.96, 1.0) * uBrightness;
+          }
+
+          // 适度弱化前玻璃反光，提升通透感
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          float fresnel = pow(1.0 - max(dot(viewDir, vWorldNormal), 0.0), 4.0);
+          finalColor += vec3(0.05, 0.07, 0.09) * fresnel;
+
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `
+    });
+
+    const frontMirror = new THREE.Mesh(mirrorGeom, mirrorShaderMat);
+    mirrorAssembly.add(frontMirror);
+    scene.add(mirrorAssembly);
+
+    // 5. 环境光效
+    scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+    const dirLight = new THREE.DirectionalLight(0xddeeff, 1.2);
+    dirLight.position.set(3, 4, 5);
+    scene.add(dirLight);
+
+    // 6. 响应间距与厚度控制滑块
+    const depthSlider = document.getElementById('depthSlider');
+    const depthValText = document.getElementById('depthValText');
+    const edgeLedSwitch = document.getElementById('edgeLedSwitch');
+    const brightSlider = document.getElementById('brightSlider');
+    const brightValText = document.getElementById('brightValText');
+
+    brightSlider.addEventListener('input', (e) => {
+      const b = parseFloat(e.target.value);
+      mirrorShaderMat.uniforms.uBrightness.value = b;
+      brightValText.textContent = `${b.toFixed(1)}x`;
+    });
+
+    function updateCavityDepth(val) {
+      mirrorShaderMat.uniforms.uCavityDepth.value = val;
+      depthValText.textContent = `${val.toFixed(2)} m`;
+
+      // 实时同步物理外壳机械厚度与后盖板位置，防止内部光路穿透外壳
+      const physicalDepth = Math.max(0.25, val * 2.0);
+      frameMesh.scale.set(1, 1, physicalDepth);
+      backCover.position.z = -physicalDepth;
+    }
+
+    depthSlider.addEventListener('input', (e) => {
+      updateCavityDepth(parseFloat(e.target.value));
+    });
+
+    edgeLedSwitch.addEventListener('change', (e) => {
+      mirrorShaderMat.uniforms.uEnableEdgeLed.value = e.target.checked ? 1.0 : 0.0;
+    });
+
+    // 初始化一次厚度
+    updateCavityDepth(0.18);
+
+    // 7. 窗口尺寸自适应
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 8. 实时视差与渲染循环
+    const invModelMatrix = new THREE.Matrix4();
+    const localEye = new THREE.Vector3();
+
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      controls.update();
+
+      // 将相机世界视线精准投射到镜片局部坐标系内，保障倾斜观察时的真实视差
+      mirrorAssembly.updateMatrixWorld();
+      invModelMatrix.copy(frontMirror.matrixWorld).invert();
+      localEye.copy(camera.position).applyMatrix4(invModelMatrix);
+      mirrorShaderMat.uniforms.uCameraLocal.value.copy(localEye);
+
+      renderer.render(scene, camera);
+    }
+
+    renderLoop();
+  </script>
+</body>
+</html>
